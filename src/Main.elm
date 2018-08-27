@@ -3,7 +3,8 @@ module Main exposing (Model, Msg(..), Nodes(..), Step(..), init, main, next, sta
 import Browser
 import Heap exposing (Heap)
 import Html exposing (..)
-import Html.Events exposing (..)
+import Html.Attributes exposing (..)
+import Html.Events exposing (onClick)
 
 
 main =
@@ -49,6 +50,10 @@ init =
         |> start
 
 
+
+-- TESTS
+
+
 test : List Int -> List Int -> Bool
 test expected input =
     if
@@ -56,7 +61,7 @@ test expected input =
             |> log "test"
             |> List.map Leaf
             |> start
-            |> traverse
+            |> testTraverseLoop
             |> unwind
             |> (==) expected
     then
@@ -64,6 +69,63 @@ test expected input =
 
     else
         Debug.todo ("got " ++ Debug.toString input ++ " instead of " ++ Debug.toString expected)
+
+
+testTraverseLoop : Step Int -> Step Int
+testTraverseLoop step =
+    case Debug.log "traverseLoop" step of
+        Pick (one :: two :: rest) sorted ->
+            Compare one two rest sorted
+                |> testTraverseLoop
+
+        Pick [ Node current children ] sorted ->
+            Pick children (current :: sorted)
+                |> testTraverseLoop
+
+        Pick [ Leaf a ] sorted ->
+            Sorted (a :: sorted)
+
+        Pick [] sorted ->
+            Sorted sorted
+
+        Compare one two others sorted ->
+            Pick (others ++ [ testChoose one two ]) sorted
+                |> testTraverseLoop
+
+        Sorted list ->
+            Sorted list
+
+
+testChoose : Nodes Int -> Nodes Int -> Nodes Int
+testChoose one two =
+    case ( one, two ) of
+        ( Leaf a, Leaf b ) ->
+            if a <= b then
+                Node a [ two ]
+
+            else
+                Node b [ one ]
+
+        ( Leaf a, Node b c ) ->
+            if a <= b then
+                Node a [ two ]
+
+            else
+                Node b (one :: c)
+
+        ( Node a c, Leaf b ) ->
+            if a <= b then
+                Node a (two :: c)
+
+            else
+                Node b [ one ]
+
+        ( Node a c, Node b d ) ->
+            if a <= b then
+                Node a (two :: c)
+
+            else
+                Node b (one :: d)
 
 
 log : String -> a -> a
@@ -119,61 +181,30 @@ nodeListToList list =
             nodeToList a ++ nodeListToList rest
 
 
-traverse : Step Int -> Step Int
+traverse : Step a -> Step a
 traverse step =
     case Debug.log "traverse" step of
         Pick (one :: two :: rest) sorted ->
             Compare one two rest sorted
-                |> traverse
 
         Pick [ Node current children ] sorted ->
             Pick children (current :: sorted)
                 |> traverse
 
         Pick [ Leaf a ] sorted ->
-            Sorted (a :: sorted)
+            (a :: sorted)
+                |> List.reverse
+                |> Sorted
 
         Pick [] sorted ->
-            Sorted sorted
+            List.reverse sorted
+                |> Sorted
 
-        Compare one two others sorted ->
-            Pick (others ++ [ next one two ]) sorted
-                |> traverse
+        Compare _ _ _ _ ->
+            step
 
-        Sorted list ->
-            Sorted list
-
-
-next : Nodes Int -> Nodes Int -> Nodes Int
-next one two =
-    case ( one, two ) of
-        ( Leaf a, Leaf b ) ->
-            if a <= b then
-                Node a [ two ]
-
-            else
-                Node b [ one ]
-
-        ( Leaf a, Node b c ) ->
-            if a <= b then
-                Node a [ two ]
-
-            else
-                Node b (one :: c)
-
-        ( Node a c, Leaf b ) ->
-            if a <= b then
-                Node a (two :: c)
-
-            else
-                Node b [ one ]
-
-        ( Node a c, Node b d ) ->
-            if a <= b then
-                Node a (two :: c)
-
-            else
-                Node b (one :: d)
+        Sorted _ ->
+            step
 
 
 
@@ -182,6 +213,8 @@ next one two =
 
 type Msg
     = NoOp
+    | PickFirst
+    | PickSecond
 
 
 update : Msg -> Model a -> Model a
@@ -191,6 +224,34 @@ update msg model =
             model
                 |> Debug.log "NoOp"
 
+        PickFirst ->
+            case model of
+                Compare a b others sorted ->
+                    Pick (append a b :: others) sorted
+                        |> traverse
+
+                _ ->
+                    Debug.todo "Invalid state"
+
+        PickSecond ->
+            case model of
+                Compare a b others sorted ->
+                    Pick (append b a :: others) sorted
+                        |> traverse
+
+                _ ->
+                    Debug.todo "Invalid state"
+
+
+append : Nodes a -> Nodes a -> Nodes a
+append parent child =
+    case parent of
+        Leaf a ->
+            Node a [ child ]
+
+        Node a children ->
+            Node a (child :: children)
+
 
 
 -- VIEW
@@ -198,4 +259,25 @@ update msg model =
 
 view : Model a -> Html Msg
 view model =
-    h2 [] [ text "todo" ]
+    case Debug.log "model" model of
+        Compare one two _ _ ->
+            div [ class "pick" ]
+                [ h2 [] [ text "Which one should have a higher priority?" ]
+                , button [ onClick PickFirst ] [ text <| Debug.toString one ]
+                , button [ onClick PickSecond ] [ text <| Debug.toString two ]
+                ]
+
+        Pick _ _ ->
+            h2 [] [ text "this state should not be reached" ]
+
+        Sorted list ->
+            div [ class "result" ]
+                [ h2 [] [ text "Your prioritization" ]
+                , ol [] <|
+                    List.map item list
+                ]
+
+
+item : a -> Html msg
+item a =
+    li [] [ text <| Debug.toString a ]
