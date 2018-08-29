@@ -1,4 +1,4 @@
-module Main exposing (Model, Msg(..), Nodes(..), Step(..), init, main, next, start, traverse, unwind, update, view)
+module Main exposing (main)
 
 import Browser
 import Heap exposing (Heap)
@@ -21,7 +21,6 @@ type alias Model a =
 
 type Step a
     = Compare (Nodes a) (Nodes a) (NodeList a) (List a)
-    | Pick (NodeList a) (List a)
     | Sorted (List a)
 
 
@@ -56,40 +55,27 @@ init =
 
 test : List Int -> List Int -> Bool
 test expected input =
-    if
-        input
-            |> log "test"
-            |> List.map Leaf
-            |> start
-            |> testTraverseLoop
-            |> unwind
-            |> (==) expected
-    then
+    let
+        actual =
+            input
+                |> log "test"
+                |> List.map Leaf
+                |> start
+                |> testTraverseLoop
+                |> unwind
+    in
+    if actual == expected then
         True
 
     else
-        Debug.todo ("got " ++ Debug.toString input ++ " instead of " ++ Debug.toString expected)
+        Debug.todo ("got " ++ Debug.toString actual ++ " instead of " ++ Debug.toString expected)
 
 
 testTraverseLoop : Step Int -> Step Int
 testTraverseLoop step =
     case Debug.log "traverseLoop" step of
-        Pick (one :: two :: rest) sorted ->
-            Compare one two rest sorted
-                |> testTraverseLoop
-
-        Pick [ Node current children ] sorted ->
-            Pick children (current :: sorted)
-                |> testTraverseLoop
-
-        Pick [ Leaf a ] sorted ->
-            Sorted (a :: sorted)
-
-        Pick [] sorted ->
-            Sorted sorted
-
         Compare one two others sorted ->
-            Pick (others ++ [ testChoose one two ]) sorted
+            pick (others ++ [ testChoose one two ]) sorted
                 |> testTraverseLoop
 
         Sorted list ->
@@ -128,6 +114,17 @@ testChoose one two =
                 Node b (one :: d)
 
 
+unwind : Step a -> List a
+unwind step =
+    case step of
+        Sorted list ->
+            list
+                |> Debug.log "sorted list"
+
+        _ ->
+            Debug.todo "TODO unwind error"
+
+
 log : String -> a -> a
 log str input =
     let
@@ -135,17 +132,6 @@ log str input =
             Debug.log ("\n" ++ str ++ " ") input
     in
     input
-
-
-unwind : Step a -> List a
-unwind step =
-    case step of
-        Sorted list ->
-            List.reverse list
-                |> Debug.log "sorted list"
-
-        _ ->
-            Debug.todo "TODO unwind error"
 
 
 start : NodeList a -> Step a
@@ -181,30 +167,29 @@ nodeListToList list =
             nodeToList a ++ nodeListToList rest
 
 
-traverse : Step a -> Step a
-traverse step =
-    case Debug.log "traverse" step of
-        Pick (one :: two :: rest) sorted ->
+pick : NodeList a -> List a -> Step a
+pick list sorted =
+    let
+        _ =
+            Debug.log "pick" ( list, sorted )
+    in
+    case list of
+        one :: two :: rest ->
             Compare one two rest sorted
 
-        Pick [ Node current children ] sorted ->
-            Pick children (current :: sorted)
-                |> traverse
+        [ Node current children ] ->
+            pick children (current :: sorted)
 
-        Pick [ Leaf a ] sorted ->
-            (a :: sorted)
-                |> List.reverse
-                |> Sorted
+        [ Leaf a ] ->
+            toSorted (a :: sorted)
 
-        Pick [] sorted ->
-            List.reverse sorted
-                |> Sorted
+        [] ->
+            toSorted sorted
 
-        Compare _ _ _ _ ->
-            step
 
-        Sorted _ ->
-            step
+toSorted : List a -> Step a
+toSorted reversedList =
+    Sorted <| List.reverse reversedList
 
 
 
@@ -227,8 +212,7 @@ update msg model =
         PickFirst ->
             case model of
                 Compare a b others sorted ->
-                    Pick (append a b :: others) sorted
-                        |> traverse
+                    pick (append a b :: others) sorted
 
                 _ ->
                     Debug.todo "Invalid state"
@@ -236,8 +220,7 @@ update msg model =
         PickSecond ->
             case model of
                 Compare a b others sorted ->
-                    Pick (append b a :: others) sorted
-                        |> traverse
+                    pick (append b a :: others) sorted
 
                 _ ->
                     Debug.todo "Invalid state"
@@ -266,9 +249,6 @@ view model =
                 , button [ onClick PickFirst ] [ text <| Debug.toString one ]
                 , button [ onClick PickSecond ] [ text <| Debug.toString two ]
                 ]
-
-        Pick _ _ ->
-            h2 [] [ text "this state should not be reached" ]
 
         Sorted list ->
             div [ class "result" ]
