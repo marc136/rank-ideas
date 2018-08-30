@@ -15,8 +15,8 @@ main =
 -- MODEL
 
 
-type alias Model a =
-    Step a
+type alias Model =
+    Step Int
 
 
 type Step a
@@ -33,7 +33,7 @@ type alias NodeList a =
     List (Nodes a)
 
 
-init : Model Int
+init : Model
 init =
     [ 3, 1, 2 ]
         |> List.map Leaf
@@ -118,12 +118,11 @@ type Msg
     | PickSecond
 
 
-update : Msg -> Model a -> Model a
+update : Msg -> Model -> Model
 update msg model =
     case msg of
         NoOp ->
             model
-                |> Debug.log "NoOp"
 
         PickFirst ->
             case model of
@@ -131,7 +130,7 @@ update msg model =
                     pick (append a b :: others) sorted
 
                 _ ->
-                    Debug.todo "Invalid state"
+                    model
 
         PickSecond ->
             case model of
@@ -139,7 +138,7 @@ update msg model =
                     pick (append b a :: others) sorted
 
                 _ ->
-                    Debug.todo "Invalid state"
+                    model
 
 
 append : Nodes a -> Nodes a -> Nodes a
@@ -156,14 +155,14 @@ append parent child =
 -- VIEW
 
 
-view : Model a -> Html Msg
+view : Model -> Html Msg
 view model =
     case Debug.log "model" model of
         Compare one two _ _ ->
             div [ class "pick" ]
                 [ h2 [] [ text "Which one should have a higher priority?" ]
-                , button [ onClick PickFirst ] [ text <| Debug.toString one ]
-                , button [ onClick PickSecond ] [ text <| Debug.toString two ]
+                , button [ onClick PickFirst ] [ text <| toString one ]
+                , button [ onClick PickSecond ] [ text <| toString two ]
                 ]
 
         Sorted list ->
@@ -174,6 +173,16 @@ view model =
                 ]
 
 
-item : a -> Html msg
+toString : Nodes Int -> String
+toString node =
+    case node of
+        Leaf int ->
+            String.fromInt int
+
+        Node int _ ->
+            String.fromInt int
+
+
+item : Int -> Html msg
 item a =
-    li [] [ text <| Debug.toString a ]
+    li [] [ text <| String.fromInt a ]
