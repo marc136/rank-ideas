@@ -1,0 +1,17 @@
+{
+  "name": "rank-ideas",
+  "version": "1.0.0",
+  "description": "Simple web app to rank/prioritize ideas",
+  "main": "index.js",
+  "dependencies": {},
+  "devDependencies": {
+    "elm-test": "^0.19.0-beta4",
+    "npx": "^10.2.0"
+  },
+  "scripts": {
+    "build": "elm make src/Main.elm --output=build/main.js --optimize",
+    "test": "npx elm-test"
+  },
+  "keywords": [],
+  "author": "Marc Walter"
+}
