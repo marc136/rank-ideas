@@ -13,5 +13,6 @@
     "test": "npx elm-test"
   },
   "keywords": [],
-  "author": "Marc Walter"
+  "author": "Marc Walter",
+  "license": "BSD-3-Clause"
 }
