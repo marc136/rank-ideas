@@ -1,10 +1,9 @@
 module Main exposing (Nodes(..), Step(..), main, pick, start)
 
 import Browser
-import Heap exposing (Heap)
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick)
+import Html.Events exposing (onClick, onInput)
 
 
 main =
@@ -16,7 +15,17 @@ main =
 
 
 type alias Model =
-    Step Int
+    { page : Page
+    }
+
+
+type Page
+    = Collect Idea (List Idea)
+    | Ranking (Step Idea)
+
+
+type Idea
+    = Title String
 
 
 type Step a
@@ -35,13 +44,8 @@ type alias NodeList a =
 
 init : Model
 init =
-    [ 3, 1, 2 ]
-        |> List.map Leaf
-        |> start
-
-
-
--- TESTS
+    { page = Collect (Title "") []
+    }
 
 
 log : String -> a -> a
@@ -53,9 +57,9 @@ log str input =
     input
 
 
-start : NodeList a -> Step a
+start : List a -> Step a
 start list =
-    case list of
+    case List.map Leaf list of
         [] ->
             Sorted []
 
@@ -114,6 +118,9 @@ toSorted reversedList =
 
 type Msg
     = NoOp
+    | AddIdea
+    | EditNewTitle String
+    | StartRanking
     | PickFirst
     | PickSecond
 
@@ -124,18 +131,50 @@ update msg model =
         NoOp ->
             model
 
+        EditNewTitle value ->
+            case model.page of
+                Collect (Title _) list ->
+                    { model | page = Collect (Title value) list }
+
+                _ ->
+                    model
+
+        AddIdea ->
+            case model.page of
+                Collect idea ideas ->
+                    { model | page = Collect (Title "") (idea :: ideas) }
+
+                _ ->
+                    model
+
+        StartRanking ->
+            case model.page of
+                Collect idea ideas ->
+                    { model | page = Ranking <| start ideas }
+
+                _ ->
+                    model
+
         PickFirst ->
-            case model of
-                Compare a b others sorted ->
-                    pick (append a b :: others) sorted
+            case model.page of
+                Ranking (Compare a b others sorted) ->
+                    { model
+                        | page =
+                            pick (append a b :: others) sorted
+                                |> Ranking
+                    }
 
                 _ ->
                     model
 
         PickSecond ->
-            case model of
-                Compare a b others sorted ->
-                    pick (append b a :: others) sorted
+            case model.page of
+                Ranking (Compare a b others sorted) ->
+                    { model
+                        | page =
+                            pick (append b a :: others) sorted
+                                |> Ranking
+                    }
 
                 _ ->
                     model
@@ -157,7 +196,44 @@ append parent child =
 
 view : Model -> Html Msg
 view model =
-    case Debug.log "model" model of
+    case model.page of
+        Collect latest ideas ->
+            viewCollect latest ideas
+
+        Ranking step ->
+            viewRanking step
+
+
+viewCollect : Idea -> List Idea -> Html Msg
+viewCollect latest ideas =
+    div [ class "collect" ]
+        [ div [ class "new" ] <| collectNewIdea latest
+        , ul [ class "ideas" ] <|
+            List.map item ideas
+        , button [ class "primary", onClick StartRanking ]
+            [ text "Start ranking" ]
+        ]
+
+
+collectNewIdea : Idea -> List (Html Msg)
+collectNewIdea idea =
+    case idea of
+        Title title ->
+            [ label [ for "new-title" ] [ text "Title" ]
+            , input
+                [ type_ "text"
+                , onInput EditNewTitle
+                , id "new-title"
+                , value title
+                ]
+                []
+            , button [ class "primary", onClick AddIdea ] [ text "Add" ]
+            ]
+
+
+viewRanking : Step Idea -> Html Msg
+viewRanking step =
+    case step of
         Compare one two _ _ ->
             div [ class "pick" ]
                 [ h2 [] [ text "Which one should have a higher priority?" ]
@@ -173,16 +249,23 @@ view model =
                 ]
 
 
-toString : Nodes Int -> String
+toString : Nodes Idea -> String
 toString node =
     case node of
-        Leaf int ->
-            String.fromInt int
+        Leaf (Title title) ->
+            title
 
-        Node int _ ->
-            String.fromInt int
+        Node (Title title) _ ->
+            title
 
 
-item : Int -> Html msg
-item a =
-    li [] [ text <| String.fromInt a ]
+item : Idea -> Html msg
+item idea =
+    case idea of
+        Title title ->
+            li title
+
+
+li : String -> Html msg
+li caption =
+    Html.li [] [ text caption ]

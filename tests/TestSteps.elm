@@ -29,7 +29,6 @@ test expected input =
 check : List Int -> List Int -> Expectation
 check expected input =
     input
-        |> List.map Leaf
         |> start
         |> testTraverseLoop
         |> unwind
