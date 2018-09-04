@@ -5,11 +5,15 @@
   "main": "index.js",
   "dependencies": {},
   "devDependencies": {
+    "create-elm-app": "^2.0.0",
     "elm-test": "^0.19.0-beta4",
     "npx": "^10.2.0"
   },
   "scripts": {
-    "build": "elm make src/Main.elm --output=build/main.js --optimize",
+    "start": "npx elm-app start",
+    "build": "npx elm-app build",
+    "build-standalone": "elm make src/Main.elm --output=build/standalone.js --optimize",
+    "build-standalone-debug": "elm make src/Main.elm --output=build/standalone.js --debug",
     "test": "npx elm-test"
   },
   "keywords": [],
