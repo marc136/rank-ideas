@@ -20,12 +20,31 @@ type alias Model =
 
 
 type Page
-    = Collect Idea (List Idea)
+    = Collect CollectingIdea (List Idea)
     | Ranking (Step Idea)
 
 
 type Idea
-    = Title String
+    = Simple String
+
+
+type IdeaType
+    = TitleOnly
+    | TitleAndUrl
+    | TitleAndDescription
+
+
+type alias CollectingIdea =
+    { kind : IdeaType
+    , title : String
+    , url : String
+    , description : String
+    }
+
+
+newIdea : CollectingIdea
+newIdea =
+    CollectingIdea TitleOnly "" "" ""
 
 
 type Step a
@@ -44,7 +63,7 @@ type alias NodeList a =
 
 init : Model
 init =
-    { page = Collect (Title "") []
+    { page = Collect newIdea []
     }
 
 
@@ -133,8 +152,8 @@ update msg model =
 
         EditNewTitle value ->
             case model.page of
-                Collect (Title _) list ->
-                    { model | page = Collect (Title value) list }
+                Collect idea list ->
+                    { model | page = Collect { idea | title = value } list }
 
                 _ ->
                     model
@@ -142,7 +161,7 @@ update msg model =
         AddIdea ->
             case model.page of
                 Collect idea ideas ->
-                    { model | page = Collect (Title "") (idea :: ideas) }
+                    { model | page = Collect newIdea (collectIdea idea ideas) }
 
                 _ ->
                     model
@@ -150,6 +169,7 @@ update msg model =
         StartRanking ->
             case model.page of
                 Collect idea ideas ->
+                    -- TODO if idea is not empty, query if it should be added
                     { model | page = Ranking <| start ideas }
 
                 _ ->
@@ -180,6 +200,48 @@ update msg model =
                     model
 
 
+collectIdea : CollectingIdea -> List Idea -> List Idea
+collectIdea new existing =
+    case
+        trimCollectingIdea new
+            |> convertIdea
+    of
+        Ok idea ->
+            idea :: existing
+
+        Err idea ->
+            existing
+
+
+trimCollectingIdea : CollectingIdea -> CollectingIdea
+trimCollectingIdea { kind, title, url, description } =
+    { kind = kind
+    , title = String.trim title
+    , url = String.trim url
+    , description = String.trim description
+    }
+
+
+convertIdea : CollectingIdea -> Result CollectingIdea Idea
+convertIdea idea =
+    if idea.kind == TitleOnly then
+        if String.isEmpty idea.title then
+            Err idea
+
+        else
+            Ok <| Simple idea.title
+
+    else
+    -- TODO
+    if
+        String.isEmpty idea.title
+    then
+        Err idea
+
+    else
+        Ok <| Simple idea.title
+
+
 append : Nodes a -> Nodes a -> Nodes a
 append parent child =
     case parent of
@@ -204,7 +266,7 @@ view model =
             viewRanking step
 
 
-viewCollect : Idea -> List Idea -> Html Msg
+viewCollect : CollectingIdea -> List Idea -> Html Msg
 viewCollect latest ideas =
     div [ class "collect" ]
         [ div [ class "new" ] <| collectNewIdea latest
@@ -215,20 +277,47 @@ viewCollect latest ideas =
         ]
 
 
-collectNewIdea : Idea -> List (Html Msg)
+collectNewIdea : CollectingIdea -> List (Html Msg)
 collectNewIdea idea =
-    case idea of
-        Title title ->
-            [ label [ for "new-title" ] [ text "Title" ]
-            , input
-                [ type_ "text"
-                , onInput EditNewTitle
-                , id "new-title"
-                , value title
+    List.concat <|
+        case idea.kind of
+            TitleOnly ->
+                [ editTitle idea
+                , addButton
                 ]
-                []
-            , button [ class "primary", onClick AddIdea ] [ text "Add" ]
-            ]
+
+            TitleAndUrl ->
+                [ editTitle idea
+
+                -- , editUrl idea
+                , addButton
+                ]
+
+            TitleAndDescription ->
+                [ editTitle idea
+
+                -- , editUrl idea
+                -- , editDescription idea
+                , addButton
+                ]
+
+
+editTitle : { a | title : String } -> List (Html Msg)
+editTitle { title } =
+    [ label [ for "new-title" ] [ text "Title" ]
+    , input
+        [ type_ "text"
+        , onInput EditNewTitle
+        , id "new-title"
+        , value title
+        ]
+        []
+    ]
+
+
+addButton : List (Html Msg)
+addButton =
+    [ button [ class "primary", onClick AddIdea ] [ text "Add" ] ]
 
 
 viewRanking : Step Idea -> Html Msg
@@ -252,17 +341,17 @@ viewRanking step =
 toString : Nodes Idea -> String
 toString node =
     case node of
-        Leaf (Title title) ->
+        Leaf (Simple title) ->
             title
 
-        Node (Title title) _ ->
+        Node (Simple title) _ ->
             title
 
 
 item : Idea -> Html msg
 item idea =
     case idea of
-        Title title ->
+        Simple title ->
             li title
 
 
