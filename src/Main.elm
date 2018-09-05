@@ -25,26 +25,23 @@ type Page
 
 
 type Idea
-    = Simple String
-
-
-type IdeaType
-    = TitleOnly
-    | TitleAndUrl
-    | TitleAndDescription
+    = Short String
+    | ShortWithLink String String
+    | Link String
+    | Idea String String
+    | IdeaWithLink String String String
 
 
 type alias CollectingIdea =
-    { kind : IdeaType
-    , title : String
-    , url : String
+    { title : String
+    , link : String
     , description : String
     }
 
 
 newIdea : CollectingIdea
 newIdea =
-    CollectingIdea TitleOnly "" "" ""
+    CollectingIdea "" "" ""
 
 
 type Step a
@@ -137,9 +134,13 @@ toSorted reversedList =
 
 type Msg
     = NoOp
+      -- Collecting ideas
     | AddIdea
+    | EditNewDescription String
     | EditNewTitle String
+    | EditNewUrl String
     | StartRanking
+      -- Ranking ideas
     | PickFirst
     | PickSecond
 
@@ -150,10 +151,26 @@ update msg model =
         NoOp ->
             model
 
+        EditNewDescription value ->
+            case model.page of
+                Collect idea list ->
+                    { model | page = Collect { idea | description = value } list }
+
+                _ ->
+                    model
+
         EditNewTitle value ->
             case model.page of
                 Collect idea list ->
                     { model | page = Collect { idea | title = value } list }
+
+                _ ->
+                    model
+
+        EditNewUrl value ->
+            case model.page of
+                Collect idea list ->
+                    { model | page = Collect { idea | link = value } list }
 
                 _ ->
                     model
@@ -214,32 +231,66 @@ collectIdea new existing =
 
 
 trimCollectingIdea : CollectingIdea -> CollectingIdea
-trimCollectingIdea { kind, title, url, description } =
-    { kind = kind
-    , title = String.trim title
-    , url = String.trim url
+trimCollectingIdea { title, link, description } =
+    { title = String.trim title
+    , link = String.trim link
     , description = String.trim description
     }
 
 
 convertIdea : CollectingIdea -> Result CollectingIdea Idea
 convertIdea idea =
-    if idea.kind == TitleOnly then
-        if String.isEmpty idea.title then
+    case ( idea.title, idea.link, idea.description ) of
+        ( "", "", "" ) ->
             Err idea
 
-        else
-            Ok <| Simple idea.title
+        ( title, "", "" ) ->
+            Ok <| Short title
+
+        ( "", link, "" ) ->
+            Ok <| Link link
+
+        ( "", "", description ) ->
+            Ok <| Idea (getBeginning description) description
+
+        ( title, link, "" ) ->
+            Ok <| ShortWithLink title link
+
+        ( title, "", description ) ->
+            Ok <| Idea title description
+
+        ( "", link, description ) ->
+            Ok <| IdeaWithLink (getBeginning description) description link
+
+        ( title, link, description ) ->
+            Ok <| IdeaWithLink title description link
+
+
+getBeginning : String -> String
+getBeginning string =
+    firstLine string
+        |> ellipse maxTitleLength
+
+
+firstLine : String -> String
+firstLine string =
+    String.lines string
+        |> List.head
+        |> Maybe.withDefault ""
+
+
+ellipse : Int -> String -> String
+ellipse max string =
+    if String.length string > max then
+        String.left (max - 3) string ++ "..."
 
     else
-    -- TODO
-    if
-        String.isEmpty idea.title
-    then
-        Err idea
+        string
 
-    else
-        Ok <| Simple idea.title
+
+maxTitleLength : Int
+maxTitleLength =
+    52
 
 
 append : Nodes a -> Nodes a -> Nodes a
@@ -279,37 +330,47 @@ viewCollect latest ideas =
 
 collectNewIdea : CollectingIdea -> List (Html Msg)
 collectNewIdea idea =
-    List.concat <|
-        case idea.kind of
-            TitleOnly ->
-                [ editTitle idea
-                , addButton
-                ]
-
-            TitleAndUrl ->
-                [ editTitle idea
-
-                -- , editUrl idea
-                , addButton
-                ]
-
-            TitleAndDescription ->
-                [ editTitle idea
-
-                -- , editUrl idea
-                -- , editDescription idea
-                , addButton
-                ]
+    [ editTitle idea.title
+    , editUrl idea.link
+    , editDescription idea.description
+    , addButton
+    ]
+        |> List.concat
 
 
-editTitle : { a | title : String } -> List (Html Msg)
-editTitle { title } =
+editTitle : String -> List (Html Msg)
+editTitle value_ =
     [ label [ for "new-title" ] [ text "Title" ]
     , input
         [ type_ "text"
         , onInput EditNewTitle
         , id "new-title"
-        , value title
+        , value value_
+        ]
+        []
+    ]
+
+
+editUrl : String -> List (Html Msg)
+editUrl value_ =
+    [ label [ for "new-url" ] [ text "URL" ]
+    , input
+        [ type_ "text"
+        , onInput EditNewUrl
+        , id "new-url"
+        , value value_
+        ]
+        []
+    ]
+
+
+editDescription : String -> List (Html Msg)
+editDescription value_ =
+    [ label [ for "new-description" ] [ text "Description" ]
+    , textarea
+        [ onInput EditNewDescription
+        , id "new-description"
+        , value value_
         ]
         []
     ]
@@ -326,8 +387,8 @@ viewRanking step =
         Compare one two _ _ ->
             div [ class "pick" ]
                 [ h2 [] [ text "Which one should have a higher priority?" ]
-                , button [ onClick PickFirst ] [ text <| toString one ]
-                , button [ onClick PickSecond ] [ text <| toString two ]
+                , toButton PickFirst (getIdea one)
+                , toButton PickSecond (getIdea two)
                 ]
 
         Sorted list ->
@@ -338,20 +399,70 @@ viewRanking step =
                 ]
 
 
-toString : Nodes Idea -> String
-toString node =
+getIdea : Nodes Idea -> Idea
+getIdea node =
     case node of
-        Leaf (Simple title) ->
-            title
+        Leaf idea ->
+            idea
 
-        Node (Simple title) _ ->
-            title
+        Node idea _ ->
+            idea
+
+
+toButton : msg -> Idea -> Html msg
+toButton msg idea =
+    case idea of
+        Short title ->
+            div [ class "idea" ]
+                [ p [ class "title" ] [ text title ]
+                , button [ onClick msg ] [ text <| "Choose " ++ title ]
+                ]
+
+        ShortWithLink title url ->
+            div [ class "idea" ]
+                [ p [ class "title" ] [ text title ]
+                , a [ href url, target "_blank" ] [ text url ]
+                , button [ onClick msg ] [ text <| "Choose " ++ title ]
+                ]
+
+        Link url ->
+            div [ class "idea" ]
+                [ a [ href url, target "_blank" ] [ text url ]
+                , button [ onClick msg ] [ text "Choose" ]
+                ]
+
+        Idea title description ->
+            div [ class "idea" ]
+                [ p [ class "title" ] [ text title ]
+                , p [ class "description" ] [ text description ]
+                , button [ onClick msg ] [ text <| "Choose " ++ title ]
+                ]
+
+        IdeaWithLink title description url ->
+            div [ class "idea" ]
+                [ p [ class "title" ] [ text title ]
+                , a [ href url, target "_blank" ] [ text url ]
+                , p [ class "description" ] [ text description ]
+                , button [ onClick msg ] [ text <| "Choose " ++ title ]
+                ]
 
 
 item : Idea -> Html msg
 item idea =
     case idea of
-        Simple title ->
+        Short title ->
+            li title
+
+        ShortWithLink title url ->
+            li title
+
+        Link url ->
+            li url
+
+        Idea title description ->
+            li title
+
+        IdeaWithLink title description url ->
             li title
 
 
